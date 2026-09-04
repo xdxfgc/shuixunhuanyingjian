@@ -33,3 +33,16 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/health` | 服务器状态 |
 
 用 Arduino IDE 打开 `YF-S401_flow/YF-S401_flow.ino`，选择 ESP32 Dev Module 编译烧录即可。
+
+## 代码结构（模块化）
+
+```
+YF-S401_flow/
+├── YF-S401_flow.ino   主文件：网络配置、全局变量、WiFi 连接、setup/loop
+├── config.h           配置文件：引脚、常量、共享变量声明、模块接口
+├── flow_sensor.cpp    流量检测模块（D34 中断计数、结算）
+├── relay.cpp          继电器/水泵控制模块（D32）
+└── web_server.cpp     网页 + 所有 /api 接口 + 路由
+```
+
+在 Arduino IDE 里打开整个 `YF-S401_flow` 文件夹，会显示成多个标签页，直接编译即可。
