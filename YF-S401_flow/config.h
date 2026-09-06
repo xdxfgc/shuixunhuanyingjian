@@ -40,6 +40,14 @@ extern unsigned long startTime;
 extern bool pumpState;          // 水泵当前状态：true=开
 extern float pumpTargetLiters;  // 定量浇水量 L，>0 时累计达到即自动关泵；0=不限
 
+// ---------------- DS18B20 温度传感器 ----------------
+#define TEMP_PIN 27                 // D27，数据线（需 4.7kΩ 上拉到 3.3V）
+#define TEMP_READ_INTERVAL_MS 2000UL  // 每 2 秒请求一次转换
+#define TEMP_CONVERSION_MS 750UL      // 12 位精度转换时间
+
+extern float lastWaterTemp;       // 水温 ℃，无效时为 NAN
+extern bool tempOk;               // 温度读数是否有效
+
 // ---------------- WebServer ----------------
 extern WebServer server;
 
@@ -54,6 +62,10 @@ void resetTotal();
 void initRelay();
 void setPump(bool on);
 
+// 温度传感器模块
+void initTempSensor();
+void processTempSensor();
+
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
 void handleRoot();
@@ -61,6 +73,7 @@ void handleData();
 void handleFlow();
 void handleVolume();
 void handleReset();
+void handleTemperature();
 void handlePumpOn();
 void handlePumpOff();
 void handlePumpToggle();

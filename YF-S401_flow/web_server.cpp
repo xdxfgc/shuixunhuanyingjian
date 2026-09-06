@@ -20,6 +20,7 @@ void handleRoot() {
   html += "<h1>YF-S401 水流量检测</h1>";
   html += "<p>瞬时流量：<b id='rate'>--</b> L/min</p>";
   html += "<p>累计水量：<b id='total'>--</b> L <span id='target'></span></p>";
+  html += "<p>水温：<b id='temp'>--</b> ℃</p>";
   html += "<p>水泵状态：<b id='pump'>--</b></p>";
   html += "<button onclick=\"doPump(1)\">开水泵</button> ";
   html += "<button onclick=\"doPump(0)\">关水泵</button></p>";
@@ -33,6 +34,8 @@ void handleRoot() {
           "fetch('/api/data').then(function(r){return r.json()}).then(function(d){"
           "document.getElementById('rate').innerText=d.flowRate.toFixed(2);"
           "document.getElementById('total').innerText=d.totalLiters.toFixed(3);"
+          "var t=document.getElementById('temp');"
+          "t.innerText=(d.temperature!=null)?d.temperature.toFixed(1):'--';"
           "var p=document.getElementById('pump');"
           "p.innerText=d.pump?'运行中':'已停止';p.style.color=d.pump?'green':'red';"
           "document.getElementById('pulses').innerText=d.pulsesInLastWindow;"
@@ -55,11 +58,23 @@ void handleData() {
   json += "\"flowRate\":" + String(lastFlowRate, 2) + ",";
   json += "\"totalLiters\":" + String(totalLiters, 3) + ",";
   json += "\"pulsesInLastWindow\":" + String(lastWindowPulses) + ",";
+  json += "\"temperature\":" + String(tempOk ? String(lastWaterTemp, 1) : String("null")) + ",";
+  json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
-  json += "\"unit\":{\"flowRate\":\"L/min\",\"total\":\"L\"},";
+  json += "\"unit\":{\"flowRate\":\"L/min\",\"total\":\"L\",\"temperature\":\"C\"},";
   json += "\"lastUpdateMs\":" + String(millis() - lastSampleMs);
   json += "}";
+  sendJson(200, json);
+}
+
+// GET /api/temperature —— 水温
+void handleTemperature() {
+  if (!tempOk) {
+    sendJson(503, "{\"status\":\"error\",\"message\":\"sensor read failed\"}");
+    return;
+  }
+  String json = "{\"value\":" + String(lastWaterTemp, 1) + ",\"unit\":\"C\"}";
   sendJson(200, json);
 }
 
@@ -131,6 +146,8 @@ void handleHealth() {
   json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
   json += "\"flowRate\":" + String(lastFlowRate, 2) + ",";
   json += "\"totalLiters\":" + String(totalLiters, 3) + ",";
+  json += "\"temperature\":" + String(tempOk ? String(lastWaterTemp, 1) : String("null")) + ",";
+  json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2);
   json += "}";
@@ -149,6 +166,7 @@ void registerRoutes() {
   server.on("/api/flow", handleFlow);
   server.on("/api/volume", handleVolume);
   server.on("/api/reset", handleReset);
+  server.on("/api/temperature", handleTemperature);
   server.on("/api/pump/on", handlePumpOn);
   server.on("/api/pump/off", handlePumpOff);
   server.on("/api/pump/toggle", handlePumpToggle);

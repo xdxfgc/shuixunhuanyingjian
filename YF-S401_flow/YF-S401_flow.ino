@@ -5,12 +5,14 @@
 // 接线（详细说明见 README 和各模块顶部注释）：
 //   YF-S401 红(VCC)->5V  黑(GND)->GND  黄(信号)->10kΩ 串到 D34，D34 再接 20kΩ 到 GND
 //   WKY-1-RELAY-1 DC+->5V  DC-->GND  IN->D32  跳线帽拨到 H（高电平触发）
+//   DS18B20 防水探头 红->3.3V  黑->GND  黄(信号)->D27（需 4.7kΩ 上拉到 3.3V）
 //   水泵用独立电源，接继电器 COM/NO，不要从 ESP32 的 5V 引脚取电
 //
 // 结构：
 //   config.h          —— 引脚、常量、共享变量、模块接口声明
 //   flow_sensor.cpp   —— 流量检测（D34 中断计数、结算）
 //   relay.cpp         —— 继电器/水泵控制（D32）
+//   temp_sensor.cpp   —— DS18B20 水温（D27，非阻塞读取）
 //   web_server.cpp    —— 网页 + 所有 /api 接口
 // ============================================================
 #include "config.h"
@@ -41,6 +43,8 @@ unsigned long lastWindowPulses = 0;      // 上次窗口内脉冲数
 unsigned long startTime = 0;
 bool pumpState = false;                  // 水泵当前状态：true=开
 float pumpTargetLiters = 0.0;            // 定量浇水量 L
+float lastWaterTemp = NAN;               // 水温 ℃，无效时为 NAN
+bool tempOk = false;                     // 温度读数是否有效
 
 WebServer server(80);
 
@@ -56,6 +60,7 @@ void setup() {
   // 模块初始化
   initFlowSensor();
   initRelay();
+  initTempSensor();
 
   // 连接 WiFi（固定 IP）
   WiFi.mode(WIFI_STA);
@@ -100,6 +105,9 @@ void setup() {
 }
 
 void loop() {
+  // 非阻塞轮询水温（每圈都调，内部自己控制节奏）
+  processTempSensor();
+
   // 每 1 秒结算一次流量并更新缓存
   if (millis() - lastSampleMs >= SAMPLE_INTERVAL_MS) {
     sampleFlow();
@@ -113,6 +121,8 @@ void loop() {
     Serial.print(lastWindowPulses);
     Serial.print("  窗口用时(ms): ");
     Serial.print(lastWindowMs);
+    Serial.print("  水温(℃): ");
+    Serial.print(tempOk ? String(lastWaterTemp, 1) : "无效");
     Serial.print("  水泵: ");
     Serial.println(pumpState ? "开" : "关");
   }
