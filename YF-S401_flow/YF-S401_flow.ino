@@ -6,6 +6,7 @@
 //   YF-S401 红(VCC)->5V  黑(GND)->GND  黄(信号)->10kΩ 串到 D34，D34 再接 20kΩ 到 GND
 //   WKY-1-RELAY-1 DC+->5V  DC-->GND  IN->D32  跳线帽拨到 H（高电平触发）
 //   DS18B20 防水探头 红->3.3V  黑->GND  黄(信号)->D27（需 4.7kΩ 上拉到 3.3V）
+//   DS18B20 #2 防水探头 红->3.3V  黑->GND  黄(信号)->D25（需 4.7kΩ 上拉到 3.3V）
 //   加热继电器 IN->D26，线圈用独立电源，12V 加热模块接继电器 COM/NO
 //   水泵用独立电源，接继电器 COM/NO，不要从 ESP32 的 5V 引脚取电
 //
@@ -15,6 +16,7 @@
 //   relay.cpp         —— 继电器/水泵控制（D32）
 //   heater.cpp        —— 加热继电器控制（D26）
 //   temp_sensor.cpp   —— DS18B20 水温（D27，非阻塞读取）
+//   temp_sensor2.cpp  —— DS18B20 水温 #2（D25，非阻塞读取）
 //   web_server.cpp    —— 网页 + 所有 /api 接口
 // ============================================================
 #include "config.h"
@@ -48,6 +50,8 @@ float pumpTargetLiters = 0.0;            // 定量浇水量 L
 bool heaterState = false;                // 加热模块当前状态：true=开
 float lastWaterTemp = NAN;               // 水温 ℃，无效时为 NAN
 bool tempOk = false;                     // 温度读数是否有效
+float lastWaterTemp2 = NAN;              // 水温2 ℃，无效时为 NAN
+bool tempOk2 = false;                    // 温度2读数是否有效
 
 WebServer server(80);
 
@@ -65,6 +69,7 @@ void setup() {
   initRelay();
   initHeaterRelay();
   initTempSensor();
+  initTempSensor2();
 
   // 连接 WiFi（固定 IP）
   WiFi.mode(WIFI_STA);
@@ -111,6 +116,7 @@ void setup() {
 void loop() {
   // 非阻塞轮询水温（每圈都调，内部自己控制节奏）
   processTempSensor();
+  processTempSensor2();
 
   // 每 1 秒结算一次流量并更新缓存
   if (millis() - lastSampleMs >= SAMPLE_INTERVAL_MS) {
@@ -127,6 +133,8 @@ void loop() {
     Serial.print(lastWindowMs);
     Serial.print("  水温(℃): ");
     Serial.print(tempOk ? String(lastWaterTemp, 1) : "无效");
+    Serial.print("  水温2(℃): ");
+    Serial.print(tempOk2 ? String(lastWaterTemp2, 1) : "无效");
     Serial.print("  水泵: ");
     Serial.print(pumpState ? "开" : "关");
     Serial.print("  加热: ");

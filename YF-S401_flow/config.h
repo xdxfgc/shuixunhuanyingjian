@@ -53,6 +53,14 @@ extern bool heaterState;         // 加热模块当前状态：true=开
 extern float lastWaterTemp;       // 水温 ℃，无效时为 NAN
 extern bool tempOk;               // 温度读数是否有效
 
+// ---------------- DS18B20 温度传感器 #2 ----------------
+#define TEMP2_PIN 25                  // D25，第二个探头数据线（需 4.7kΩ 上拉到 3.3V）
+#define TEMP2_READ_INTERVAL_MS 2000UL // 每 2 秒请求一次转换
+#define TEMP2_CONVERSION_MS 750UL     // 12 位精度转换时间
+
+extern float lastWaterTemp2;      // 水温2 ℃，无效时为 NAN
+extern bool tempOk2;              // 温度2读数是否有效
+
 // ---------------- WebServer ----------------
 extern WebServer server;
 
@@ -74,6 +82,8 @@ void setHeater(bool on);
 // 温度传感器模块
 void initTempSensor();
 void processTempSensor();
+void initTempSensor2();
+void processTempSensor2();
 
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
@@ -83,6 +93,7 @@ void handleFlow();
 void handleVolume();
 void handleReset();
 void handleTemperature();
+void handleTemperature2();
 void handlePumpOn();
 void handlePumpOff();
 void handlePumpToggle();
