@@ -40,6 +40,11 @@ extern unsigned long startTime;
 extern bool pumpState;          // 水泵当前状态：true=开
 extern float pumpTargetLiters;  // 定量浇水量 L，>0 时累计达到即自动关泵；0=不限
 
+// ---------------- 电磁继电器 / 加热模块 ----------------
+#define HEATER_PIN 26            // D26，加热继电器信号线 IN
+#define HEATER_ACTIVE_HIGH 1     // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
+extern bool heaterState;         // 加热模块当前状态：true=开
+
 // ---------------- DS18B20 温度传感器 ----------------
 #define TEMP_PIN 27                 // D27，数据线（需 4.7kΩ 上拉到 3.3V）
 #define TEMP_READ_INTERVAL_MS 2000UL  // 每 2 秒请求一次转换
@@ -62,6 +67,10 @@ void resetTotal();
 void initRelay();
 void setPump(bool on);
 
+// 加热继电器模块
+void initHeaterRelay();
+void setHeater(bool on);
+
 // 温度传感器模块
 void initTempSensor();
 void processTempSensor();
@@ -79,6 +88,10 @@ void handlePumpOff();
 void handlePumpToggle();
 void handlePumpState();
 void handlePumpTarget();
+void handleHeaterOn();
+void handleHeaterOff();
+void handleHeaterToggle();
+void handleHeaterState();
 void handleHealth();
 void handleNotFound();
 void registerRoutes();

@@ -24,6 +24,9 @@ void handleRoot() {
   html += "<p>水泵状态：<b id='pump'>--</b></p>";
   html += "<button onclick=\"doPump(1)\">开水泵</button> ";
   html += "<button onclick=\"doPump(0)\">关水泵</button></p>";
+  html += "<p>加热状态：<b id='heater'>--</b></p>";
+  html += "<button onclick=\"doHeater(1)\">开加热</button> ";
+  html += "<button onclick=\"doHeater(0)\">关加热</button></p>";
   html += "<p>定量浇水(L)：<input id='tgt' type='number' step='0.1' min='0' value='0'> ";
   html += "<button onclick=\"doTarget()\">设定</button></p>";
   html += "<p>上一窗口脉冲数：<b id='pulses'>--</b>，用时 <b id='win'>--</b> ms</p>";
@@ -38,12 +41,15 @@ void handleRoot() {
           "t.innerText=(d.temperature!=null)?d.temperature.toFixed(1):'--';"
           "var p=document.getElementById('pump');"
           "p.innerText=d.pump?'运行中':'已停止';p.style.color=d.pump?'green':'red';"
+          "var h=document.getElementById('heater');"
+          "h.innerText=d.heater?'加热中':'已停止';h.style.color=d.heater?'orange':'gray';"
           "document.getElementById('pulses').innerText=d.pulsesInLastWindow;"
           "document.getElementById('win').innerText=d.lastUpdateMs;"
           "if(d.pumpTarget>0){document.getElementById('target').innerText=' / 目标 '+d.pumpTarget.toFixed(2)+' L';}"
           "else{document.getElementById('target').innerText='';}"
           "}).catch(function(){});}"
           "function doPump(on){fetch('/api/pump/'+(on?'on':'off')).then(refresh);}"
+          "function doHeater(on){fetch('/api/heater/'+(on?'on':'off')).then(refresh);}"
           "function doTarget(){fetch('/api/pump/target?value='+document.getElementById('tgt').value).then(refresh);}"
           "refresh();setInterval(refresh,2000);"
           "</script></body></html>";
@@ -62,6 +68,7 @@ void handleData() {
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
+  json += "\"heater\":" + String(heaterState ? "true" : "false") + ",";
   json += "\"unit\":{\"flowRate\":\"L/min\",\"total\":\"L\",\"temperature\":\"C\"},";
   json += "\"lastUpdateMs\":" + String(millis() - lastSampleMs);
   json += "}";
@@ -137,6 +144,31 @@ void handlePumpTarget() {
   sendJson(200, json);
 }
 
+// GET /api/heater/on —— 开加热
+void handleHeaterOn() {
+  setHeater(true);
+  sendJson(200, "{\"status\":\"ok\",\"heater\":true}");
+}
+
+// GET /api/heater/off —— 关加热
+void handleHeaterOff() {
+  setHeater(false);
+  sendJson(200, "{\"status\":\"ok\",\"heater\":false}");
+}
+
+// GET /api/heater/toggle —— 切换加热开关
+void handleHeaterToggle() {
+  setHeater(!heaterState);
+  String json = "{\"status\":\"ok\",\"heater\":" + String(heaterState ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
+// GET /api/heater/state —— 查询加热状态
+void handleHeaterState() {
+  String json = "{\"heater\":" + String(heaterState ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
 // GET /api/health —— 服务器状态
 void handleHealth() {
   String json = "{";
@@ -149,7 +181,8 @@ void handleHealth() {
   json += "\"temperature\":" + String(tempOk ? String(lastWaterTemp, 1) : String("null")) + ",";
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
-  json += "\"pumpTarget\":" + String(pumpTargetLiters, 2);
+  json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
+  json += "\"heater\":" + String(heaterState ? "true" : "false");
   json += "}";
   sendJson(200, json);
 }
@@ -172,6 +205,10 @@ void registerRoutes() {
   server.on("/api/pump/toggle", handlePumpToggle);
   server.on("/api/pump/state", handlePumpState);
   server.on("/api/pump/target", handlePumpTarget);
+  server.on("/api/heater/on", handleHeaterOn);
+  server.on("/api/heater/off", handleHeaterOff);
+  server.on("/api/heater/toggle", handleHeaterToggle);
+  server.on("/api/heater/state", handleHeaterState);
   server.on("/api/health", handleHealth);
   server.onNotFound(handleNotFound);
 }

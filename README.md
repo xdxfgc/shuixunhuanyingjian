@@ -8,6 +8,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 - DS18B20 防水探头水温检测（D27，非阻塞读取）
 - WiFi 联网（固定 IP + mDNS）
 - 网页控制继电器水泵（D32）开关
+- 网页控制加热继电器（D26）开关
 - 定量浇水：累计水量达到设定值自动关泵
 - HTTP 接口，方便其他设备取数据 / 控制
 
@@ -17,6 +18,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 - DS18B20 防水探头：红 → 3.3V，黑 → GND，黄（信号）→ D27（需 4.7kΩ 上拉到 3.3V）
 - 继电器（WKY-1-RELAY-1）：DC+ → 5V，DC- → GND，IN → D32，跳线帽拨到 H（高电平触发）
 - 水泵：用独立电源，接继电器 COM/NO
+- 加热继电器：IN → D26；线圈用独立电源；12V 加热模块接继电器 COM/NO
 
 依赖库：OneWire、DallasTemperature（Arduino IDE 库管理器安装）
 
@@ -35,6 +37,10 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/pump/toggle` | 切换 |
 | `GET /api/pump/state` | 水泵状态 |
 | `GET /api/pump/target?value=2.5` | 设定定量浇水量 |
+| `GET /api/heater/on` | 开加热 |
+| `GET /api/heater/off` | 关加热 |
+| `GET /api/heater/toggle` | 切换加热 |
+| `GET /api/heater/state` | 加热状态 |
 | `GET /api/health` | 服务器状态 |
 
 用 Arduino IDE 打开 `YF-S401_flow/YF-S401_flow.ino`，选择 ESP32 Dev Module 编译烧录即可。
@@ -48,6 +54,7 @@ YF-S401_flow/
 ├── flow_sensor.cpp    流量检测模块（D34 中断计数、结算）
 ├── temp_sensor.cpp    水温检测模块（D27，DS18B20）
 ├── relay.cpp          继电器/水泵控制模块（D32）
+├── heater.cpp         加热继电器控制模块（D26）
 └── web_server.cpp     网页 + 所有 /api 接口 + 路由
 ```
 
