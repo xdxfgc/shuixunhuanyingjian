@@ -22,6 +22,7 @@ void handleRoot() {
   html += "<p>累计水量：<b id='total'>--</b> L <span id='target'></span></p>";
   html += "<p>水温：<b id='temp'>--</b> ℃</p>";
   html += "<p>水温2：<b id='temp2'>--</b> ℃</p>";
+  html += "<p>压力：<b id='pressure'>--</b> MPa</p>";
   html += "<p>水泵状态：<b id='pump'>--</b></p>";
   html += "<button onclick=\"doPump(1)\">开水泵</button> ";
   html += "<button onclick=\"doPump(0)\">关水泵</button></p>";
@@ -42,6 +43,8 @@ void handleRoot() {
           "t.innerText=(d.temperature!=null)?d.temperature.toFixed(1):'--';"
           "var t2=document.getElementById('temp2');"
           "t2.innerText=(d.temperature2!=null)?d.temperature2.toFixed(1):'--';"
+          "var pr=document.getElementById('pressure');"
+          "pr.innerText=(d.pressure!=null)?d.pressure.toFixed(3):'--';"
           "var p=document.getElementById('pump');"
           "p.innerText=d.pump?'运行中':'已停止';p.style.color=d.pump?'green':'red';"
           "var h=document.getElementById('heater');"
@@ -71,6 +74,8 @@ void handleData() {
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"temperature2\":" + String(tempOk2 ? String(lastWaterTemp2, 1) : String("null")) + ",";
   json += "\"tempOk2\":" + String(tempOk2 ? "true" : "false") + ",";
+  json += "\"pressure\":" + String(pressureOk ? String(lastPressure, 3) : String("null")) + ",";
+  json += "\"pressureOk\":" + String(pressureOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false") + ",";
@@ -103,6 +108,17 @@ void handleTemperature2() {
 // GET /api/flow —— 瞬时流量
 void handleFlow() {
   String json = "{\"value\":" + String(lastFlowRate, 2) + ",\"unit\":\"L/min\"}";
+  sendJson(200, json);
+}
+
+// GET /api/pressure —— 压力（0-1MPa）
+void handlePressure() {
+  if (!pressureOk) {
+    sendJson(503, "{\"status\":\"error\",\"message\":\"sensor read failed\"}");
+    return;
+  }
+  String json = "{\"value\":" + String(lastPressure, 3) +
+                ",\"unit\":\"MPa\",\"voltage\":" + String(lastPressureVoltage, 3) + "}";
   sendJson(200, json);
 }
 
@@ -197,6 +213,8 @@ void handleHealth() {
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"temperature2\":" + String(tempOk2 ? String(lastWaterTemp2, 1) : String("null")) + ",";
   json += "\"tempOk2\":" + String(tempOk2 ? "true" : "false") + ",";
+  json += "\"pressure\":" + String(pressureOk ? String(lastPressure, 3) : String("null")) + ",";
+  json += "\"pressureOk\":" + String(pressureOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false");
@@ -218,6 +236,7 @@ void registerRoutes() {
   server.on("/api/reset", handleReset);
   server.on("/api/temperature", handleTemperature);
   server.on("/api/temperature2", handleTemperature2);
+  server.on("/api/pressure", handlePressure);
   server.on("/api/pump/on", handlePumpOn);
   server.on("/api/pump/off", handlePumpOff);
   server.on("/api/pump/toggle", handlePumpToggle);

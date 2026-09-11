@@ -61,6 +61,21 @@ extern bool tempOk;               // 温度读数是否有效
 extern float lastWaterTemp2;      // 水温2 ℃，无效时为 NAN
 extern bool tempOk2;              // 温度2读数是否有效
 
+// ---------------- 压力传感器（0-1MPa 模拟输出，D33） ----------------
+// ⚠️ 若传感器 5V 供电、输出 0.5~4.5V，D33 前必须分压（10kΩ 串 + 20kΩ 到 GND）
+#define PRESSURE_PIN 33                  // D33，ADC1（WiFi 下也能用）
+#define PRESSURE_SAMPLE_INTERVAL_MS 1000UL
+#define PRESSURE_VREF 3.3                // ADC 满量程参考电压（衰减 11dB）
+#define PRESSURE_V_MIN 0.5               // 0 MPa 时传感器输出电压
+#define PRESSURE_V_MAX 4.5               // 满量程时传感器输出电压
+#define PRESSURE_P_MAX 1.0               // 量程 MPa
+#define PRESSURE_DIVIDER_RATIO 0.6667    // 10k 串 + 20k 到 GND：引脚电压 = 传感器输出 × 0.6667
+#define PRESSURE_SAMPLES 16              // 每次采样平均次数
+
+extern float lastPressure;           // 压力 MPa
+extern float lastPressureVoltage;    // 换算出的传感器输出电压（标定用）
+extern bool pressureOk;              // 压力读数是否有效
+
 // ---------------- WebServer ----------------
 extern WebServer server;
 
@@ -85,6 +100,10 @@ void processTempSensor();
 void initTempSensor2();
 void processTempSensor2();
 
+// 压力传感器模块
+void initPressureSensor();
+void processPressureSensor();
+
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
 void handleRoot();
@@ -94,6 +113,7 @@ void handleVolume();
 void handleReset();
 void handleTemperature();
 void handleTemperature2();
+void handlePressure();
 void handlePumpOn();
 void handlePumpOff();
 void handlePumpToggle();
