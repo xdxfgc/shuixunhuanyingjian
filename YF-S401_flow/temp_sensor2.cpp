@@ -5,8 +5,6 @@
 // 依赖库：OneWire、DallasTemperature（Arduino 库管理器搜索安装）
 // ============================================================
 #include "config.h"
-#include <OneWire.h>
-#include <DallasTemperature.h>
 
 // 模块内部对象与状态（不对外暴露）
 static OneWire oneWire2(TEMP2_PIN);

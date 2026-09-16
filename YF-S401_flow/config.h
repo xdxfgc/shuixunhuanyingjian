@@ -8,6 +8,15 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+// ⚠️ 以下库虽然只在各个 .cpp 模块里用到，但必须集中写在这个文件里。
+// 原因：Arduino 的库发现机制并不总能扫到「只被额外 .cpp 文件包含」的库，
+// 一旦漏掉就会报 "xxx.h: No such file or directory"（Wire.h / Preferences.h /
+// OneWire.h / DallasTemperature.h 都踩过这个坑）。
+// config.h 被 .ino 直接包含，写在这里能被稳定发现。
+#include <Wire.h>             // GY-302（BH1750）I2C
+#include <Preferences.h>      // 液位标定值掉电保存（NVS）
+#include <OneWire.h>          // DS18B20 单总线
+#include <DallasTemperature.h> // DS18B20 温度读取
 
 // ---------------- 网络配置（在这里改 SSID/密码/IP） ----------------
 // ⚠️ 标准 ESP32 只支持 2.4GHz WiFi，不支持 5GHz 频段！
@@ -74,10 +83,64 @@ extern bool tempOk2;              // 温度2读数是否有效
 
 extern float lastPressure;           // 压力 MPa
 extern float lastPressureVoltage;    // 换算出的传感器输出电压（标定用）
+extern float lastPressureRaw;        // ADC 原始平均值（0~4095，标定/排查用）
+extern float lastPressurePinVoltage; // D33 引脚实际电压 V（标定/排查用）
 extern bool pressureOk;              // 压力读数是否有效
+
+// ---------------- 超声波测距传感器（HC-SR04 / JSN-SR04T，Trig + Echo）----------------
+// 原理：Trig 收 10µs 脉冲后发一次超声波，Echo 回一个「高电平宽度 = 声波往返时间」的脉冲：
+//         距离 = 声速 × 时间 / 2    （空气中约 343m/s，即 0.343mm/µs）
+//       传感器装在箱子上方朝下打水面，水位反着算：
+//         水位 = 预定高度(TANK_HEIGHT_MM) − 测距值
+//       箱子越空 → 测距越大 → 水位越低；水越满 → 测距越小 → 水位越高
+//
+// 接线：VCC -> 5V，GND -> GND，Trig -> D23，Echo -> 分压 -> D18
+//   ⚠️ Echo 输出是 5V，必须分压后再进 ESP32：Echo →1kΩ→ D18，D18 →2kΩ→ GND
+//      （用 10kΩ + 20kΩ 也行，比例同样是 0.667，输出电压约 3.3V）
+//      若用的是 3.3V 版本模块（如 RCWL-1601），Echo 可以直连不用分压
+#define ULTRASONIC_TRIG_PIN 23        // D23，Trig（数字输出）
+#define ULTRASONIC_ECHO_PIN 18        // D18，Echo（数字输入，经分压）
+#define ULTRASONIC_SAMPLE_INTERVAL_MS 500UL   // 每 0.5 秒测一次
+#define ULTRASONIC_MIN_INTERVAL_MS 60UL       // HC-SR04 两次触发之间至少要隔 60ms
+#define ULTRASONIC_EXTRA_TIMEOUT_MM 300.0     // 等待回波的余量（超出量程就不等，减少阻塞）
+#define ULTRASONIC_MEDIAN_SAMPLES 3           // 最近 3 次有效读数取中位数，抗水波干扰
+
+// ★ 预定高度（毫米）：传感器探头面 → 箱底 的垂直距离，水位计算的基准
+//   本机预定高度 = 8.5cm = 85mm（探头面到箱底 85mm）
+//   换箱子或挪传感器后重新量一次；也可运行时用 /api/level/height?value=85 修改（存 NVS，掉电不丢）
+#define TANK_HEIGHT_MM 85.0
+
+extern float lastDistanceMm;       // 测距值 mm（传感器 → 水面）
+extern float lastEchoUs;           // 回声脉冲宽度 µs（0 = 没收到回波，排查用）
+                                   // 换算：距离(mm) = 脉宽(µs) × 0.343 ÷ 2
+extern bool distanceOk;            // 测距读数是否有效
+extern float tankHeightMm;         // 当前预定高度 mm
+extern float lastLevelMm;          // 水位高度 mm = 预定高度 − 测距值
+extern float lastLevelPercent;     // 水位 0~100 %
+extern bool levelOk;               // 水位是否有效（跟随测距是否有效）
+
+// ---------------- GY-302 光照传感器（BH1750 芯片，I2C） ----------------
+// 接线：VCC -> 3.3V，GND -> GND，SDA -> D21，SCL -> D22（模块自带 4.7kΩ 上拉，无需外接）
+// 地址：ADDR 悬空/接地 = 0x23（默认）；ADDR 接 VCC = 0x5C。初始化时会自动探测
+#define LIGHT_SDA_PIN 21              // D21，I2C SDA
+#define LIGHT_SCL_PIN 22              // D22，I2C SCL
+#define LIGHT_ADDR_PRIMARY 0x23       // ADDR 悬空/接 GND
+#define LIGHT_ADDR_ALT 0x5C           // ADDR 接 VCC
+#define LIGHT_READ_INTERVAL_MS 1000UL // 高分辨率模式转换约 120ms，每秒读一次足够
+
+extern float lastLux;             // 光照强度 lx，无效时无效标志为 false
+extern bool lightOk;              // 光照读数是否有效
 
 // ---------------- WebServer ----------------
 extern WebServer server;
+
+// ---------------- 接线自检（调试用） ----------------
+// 1=每 5 秒把空闲的 ADC1 引脚原始值打到串口，用来确认「线到底插在哪个脚」：
+//   [ADC自检] D33(压力)=.. D34(流量)=.. D35(液位)=.. D36(空闲)=.. D39(空闲)=..
+// 用一根杜邦线把某个引脚短到 GND 或 3.3V，看哪一列数字跟着变，就知道引脚和线是否对应。
+// 全部接线确认无误后改成 0，串口就只剩每秒的正常数据。
+#define ADC_DEBUG_DUMP 1
+#define ADC_DEBUG_INTERVAL_MS 5000UL
 
 // ---------------- 模块接口声明 ----------------
 // 流量传感器模块
@@ -104,6 +167,15 @@ void processTempSensor2();
 void initPressureSensor();
 void processPressureSensor();
 
+// 超声波测距 / 水位模块
+void initDistanceSensor();
+void processDistanceSensor();
+void setTankHeightMm(float mm);
+
+// 光照传感器模块（GY-302 / BH1750）
+void initLightSensor();
+void processLightSensor();
+
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
 void handleRoot();
@@ -124,6 +196,9 @@ void handleHeaterOff();
 void handleHeaterToggle();
 void handleHeaterState();
 void handleHealth();
+void handleLevel();
+void handleLevelHeight();
+void handleLight();
 void handleNotFound();
 void registerRoutes();
 

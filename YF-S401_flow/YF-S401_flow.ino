@@ -8,6 +8,8 @@
 //   DS18B20 防水探头 红->3.3V  黑->GND  黄(信号)->D27（需 4.7kΩ 上拉到 3.3V）
 //   DS18B20 #2 防水探头 红->3.3V  黑->GND  黄(信号)->D25（需 4.7kΩ 上拉到 3.3V）
 //   压力传感器 红->5V  黑->GND  黄(信号)->10kΩ 串到 D33，D33 再接 20kΩ 到 GND
+//   超声波测距 VCC->5V  GND->GND  Trig->D23  Echo->1kΩ->D18->2kΩ->GND（5V 必须分压）
+//   GY-302 光照 VCC->3.3V  GND->GND  SDA->D21  SCL->D22
 //   加热继电器 IN->D26，线圈用独立电源，12V 加热模块接继电器 COM/NO
 //   水泵用独立电源，接继电器 COM/NO，不要从 ESP32 的 5V 引脚取电
 //
@@ -19,6 +21,8 @@
 //   temp_sensor.cpp     —— DS18B20 水温（D27，非阻塞读取）
 //   temp_sensor2.cpp    —— DS18B20 水温 #2（D25，非阻塞读取）
 //   pressure_sensor.cpp —— 压力传感器（D33，模拟读取）
+//   distance_sensor.cpp —— 超声波测距测水位（Trig D23 / Echo D18；水位 = 预定高度 − 测距）
+//   light_sensor.cpp    —— GY-302 光照传感器（BH1750，I2C D21/D22）
 //   web_server.cpp      —— 网页 + 所有 /api 接口
 // ============================================================
 #include "config.h"
@@ -29,7 +33,7 @@ const char* WIFI_SSID = "Xiaomi_AE4D";
 const char* WIFI_PASSWORD = "123456780";
 
 // 固定 IP（按你的路由器网段调整）
-IPAddress LOCAL_IP(192, 168, 31, 100);
+IPAddress LOCAL_IP(192,168,31,100);
 IPAddress GATEWAY(192, 168, 31, 1);
 IPAddress SUBNET(255, 255, 255, 0);
 IPAddress DNS1(192, 168, 31, 1);
@@ -56,7 +60,19 @@ float lastWaterTemp2 = NAN;              // 水温2 ℃，无效时为 NAN
 bool tempOk2 = false;                    // 温度2读数是否有效
 float lastPressure = 0.0;                // 压力 MPa
 float lastPressureVoltage = 0.0;         // 传感器输出电压（标定用）
+float lastPressureRaw = 0.0;             // 压力 ADC 原始平均值 0~4095（排查用）
+float lastPressurePinVoltage = 0.0;      // D33 引脚实际电压 V（排查用）
 bool pressureOk = false;                 // 压力读数是否有效
+float lastDistanceMm = 0.0;              // 测距值 mm（传感器 → 水面）
+float lastEchoUs = 0.0;                  // 回声脉冲宽度 µs（0=无回波，排查用）
+bool distanceOk = false;                 // 测距读数是否有效
+float tankHeightMm = TANK_HEIGHT_MM;     // ★预定高度：传感器出光面 → 箱底（水位基准）
+float lastLevelMm = 0.0;                 // 水位高度 mm = 预定高度 − 测距值
+float lastLevelPercent = 0.0;            // 水位 0~100 %
+bool levelOk = false;                    // 水位是否有效
+float lastLux = 0.0;                     // 光照强度 lx
+bool lightOk = false;                    // 光照读数是否有效
+unsigned long lastAdcDumpMs = 0;         // 接线自检输出计时（ADC_DEBUG_DUMP=1 时用）
 
 WebServer server(80);
 
@@ -76,6 +92,8 @@ void setup() {
   initTempSensor();
   initTempSensor2();
   initPressureSensor();
+  initDistanceSensor();
+  initLightSensor();
 
   // 连接 WiFi（固定 IP）
   WiFi.mode(WIFI_STA);
@@ -120,10 +138,29 @@ void setup() {
 }
 
 void loop() {
-  // 非阻塞轮询水温（每圈都调，内部自己控制节奏）
+  // 非阻塞轮询各传感器（每圈都调，各模块内部自己控制节奏）
   processTempSensor();
   processTempSensor2();
   processPressureSensor();
+  processDistanceSensor();
+  processLightSensor();
+
+#if ADC_DEBUG_DUMP
+  // 接线自检：把所有空闲 ADC1 引脚打一遍，便于确认线插在哪个脚（确认后把 ADC_DEBUG_DUMP 改 0）
+  if (millis() - lastAdcDumpMs >= ADC_DEBUG_INTERVAL_MS) {
+    lastAdcDumpMs = millis();
+    Serial.print("[ADC自检] D33(压力)=");
+    Serial.print(analogRead(33));
+    Serial.print(" D34(流量)=");
+    Serial.print(analogRead(34));
+    Serial.print(" D35(空闲)=");
+    Serial.print(analogRead(35));
+    Serial.print(" D36(空闲)=");
+    Serial.print(analogRead(36));
+    Serial.print(" D39(空闲)=");
+    Serial.println(analogRead(39));
+  }
+#endif
 
   // 每 1 秒结算一次流量并更新缓存
   if (millis() - lastSampleMs >= SAMPLE_INTERVAL_MS) {
@@ -144,10 +181,35 @@ void loop() {
     Serial.print(tempOk2 ? String(lastWaterTemp2, 1) : "无效");
     Serial.print("  压力(MPa): ");
     Serial.print(pressureOk ? String(lastPressure, 3) : "无效");
+    Serial.print(" [ADC ");
+    Serial.print(lastPressureRaw, 0);
+    Serial.print(" / 引脚 ");
+    Serial.print(lastPressurePinVoltage, 3);
+    Serial.print("V / 传感器 ");
+    Serial.print(lastPressureVoltage, 3);
+    Serial.print("V]");
     Serial.print("  水泵: ");
     Serial.print(pumpState ? "开" : "关");
     Serial.print("  加热: ");
-    Serial.println(heaterState ? "开" : "关");
+    Serial.print(heaterState ? "开" : "关");
+    Serial.print("  水位(%): ");
+    Serial.print(levelOk ? String(lastLevelPercent, 1) : "无效");
+    Serial.print(" 高度: ");
+    if (levelOk) {
+      Serial.print(lastLevelMm, 1);
+      Serial.print("mm");
+    } else {
+      Serial.print("无效");
+    }
+    Serial.print(" 测距: ");
+    Serial.print(distanceOk ? String(lastDistanceMm, 1) : "无效");
+    Serial.print("mm [回声 ");
+    Serial.print(lastEchoUs, 0);
+    Serial.print("us] 预定高度: ");
+    Serial.print(tankHeightMm, 1);
+    Serial.print("mm");
+    Serial.print("  光照(lx): ");
+    Serial.println(lightOk ? String(lastLux, 1) : "无效");
   }
 
   // 处理 HTTP 请求
