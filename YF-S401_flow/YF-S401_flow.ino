@@ -146,13 +146,12 @@ void loop() {
   processLightSensor();
 
 #if ADC_DEBUG_DUMP
-  // 接线自检：把所有空闲 ADC1 引脚打一遍，便于确认线插在哪个脚（确认后把 ADC_DEBUG_DUMP 改 0）
+  // 接线自检：打印空闲的 ADC1 引脚原始值，便于确认线插在哪个脚
+  // ⚠️ 这里故意不读 D34（流量中断脚）——analogRead 会解除该脚的数字中断，导致流量读 0
   if (millis() - lastAdcDumpMs >= ADC_DEBUG_INTERVAL_MS) {
     lastAdcDumpMs = millis();
     Serial.print("[ADC自检] D33(压力)=");
     Serial.print(analogRead(33));
-    Serial.print(" D34(流量)=");
-    Serial.print(analogRead(34));
     Serial.print(" D35(空闲)=");
     Serial.print(analogRead(35));
     Serial.print(" D36(空闲)=");
