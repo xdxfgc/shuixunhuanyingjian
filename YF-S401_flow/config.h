@@ -116,9 +116,9 @@ extern bool pressureOk;              // 压力读数是否有效
 #define ULTRASONIC_MEDIAN_SAMPLES 3           // 最近 3 次有效读数取中位数，抗水波干扰
 
 // ★ 预定高度（毫米）：传感器探头面 → 箱底 的垂直距离，水位计算的基准
-//   本机预定高度 = 8.5cm = 85mm（探头面到箱底 85mm）
-//   换箱子或挪传感器后重新量一次；也可运行时用 /api/level/height?value=85 修改（存 NVS，掉电不丢）
-#define TANK_HEIGHT_MM 85.0
+//   本机预定高度 = 10cm = 100mm（探头面到箱底 100mm）
+//   换箱子或挪传感器后重新量一次；也可运行时用 /api/level/height?value=100 修改（存 NVS，掉电不丢）
+#define TANK_HEIGHT_MM 100.0
 
 extern float lastDistanceMm;       // 测距值 mm（传感器 → 水面）
 extern float lastEchoUs;           // 回声脉冲宽度 µs（0 = 没收到回波，排查用）
