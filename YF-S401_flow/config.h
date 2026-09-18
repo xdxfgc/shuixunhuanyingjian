@@ -59,6 +59,11 @@ extern bool pumpState2;         // 水泵2 当前状态：true=开
 #define HEATER_ACTIVE_HIGH 1     // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
 extern bool heaterState;         // 加热模块当前状态：true=开
 
+// ---------------- 加热模块 #2 ----------------
+#define HEATER2_PIN 16           // D16，第二个加热继电器信号线 IN
+#define HEATER2_ACTIVE_HIGH 1    // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
+extern bool heaterState2;        // 加热2 当前状态：true=开
+
 // ---------------- DS18B20 温度传感器 ----------------
 #define TEMP_PIN 27                 // D27，数据线（需 4.7kΩ 上拉到 3.3V）
 #define TEMP_READ_INTERVAL_MS 2000UL  // 每 2 秒请求一次转换
@@ -170,6 +175,10 @@ void setPump2(bool on);
 void initHeaterRelay();
 void setHeater(bool on);
 
+// 第二路加热继电器模块
+void initHeaterRelay2();
+void setHeater2(bool on);
+
 // 温度传感器模块
 void initTempSensor();
 void processTempSensor();
@@ -212,6 +221,10 @@ void handleHeaterOn();
 void handleHeaterOff();
 void handleHeaterToggle();
 void handleHeaterState();
+void handleHeater2On();
+void handleHeater2Off();
+void handleHeater2Toggle();
+void handleHeater2State();
 void handleHealth();
 void handleLevel();
 void handleLevelHeight();

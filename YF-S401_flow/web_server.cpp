@@ -34,6 +34,9 @@ void handleRoot() {
   html += "<p>加热状态：<b id='heater'>--</b></p>";
   html += "<button onclick=\"doHeater(1)\">开加热</button> ";
   html += "<button onclick=\"doHeater(0)\">关加热</button></p>";
+  html += "<p>加热2状态：<b id='heater2'>--</b></p>";
+  html += "<button onclick=\"doHeater2(1)\">开加热2</button> ";
+  html += "<button onclick=\"doHeater2(0)\">关加热2</button></p>";
   html += "<p>定量浇水(L)：<input id='tgt' type='number' step='0.1' min='0' value='0'> ";
   html += "<button onclick=\"doTarget()\">设定</button></p>";
   html += "<p>上一窗口脉冲数：<b id='pulses'>--</b>，用时 <b id='win'>--</b> ms</p>";
@@ -67,6 +70,8 @@ void handleRoot() {
           "p2el.innerText=d.pump2?'运行中':'已停止';p2el.style.color=d.pump2?'green':'red';"
           "var h=document.getElementById('heater');"
           "h.innerText=d.heater?'加热中':'已停止';h.style.color=d.heater?'orange':'gray';"
+          "var h2=document.getElementById('heater2');"
+          "h2.innerText=d.heater2?'加热中':'已停止';h2.style.color=d.heater2?'orange':'gray';"
           "document.getElementById('pulses').innerText=d.pulsesInLastWindow;"
           "document.getElementById('win').innerText=d.lastUpdateMs;"
           "if(d.pumpTarget>0){document.getElementById('target').innerText=' / 目标 '+d.pumpTarget.toFixed(2)+' L';}"
@@ -75,6 +80,7 @@ void handleRoot() {
           "function doPump(on){fetch('/api/pump/'+(on?'on':'off')).then(refresh);}"
           "function doPump2(on){fetch('/api/pump2/'+(on?'on':'off')).then(refresh);}"
           "function doHeater(on){fetch('/api/heater/'+(on?'on':'off')).then(refresh);}"
+          "function doHeater2(on){fetch('/api/heater2/'+(on?'on':'off')).then(refresh);}"
           "function doTarget(){fetch('/api/pump/target?value='+document.getElementById('tgt').value).then(refresh);}"
           "refresh();setInterval(refresh,2000);"
           "</script></body></html>";
@@ -108,6 +114,7 @@ void handleData() {
   json += "\"pump2\":" + String(pumpState2 ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false") + ",";
+  json += "\"heater2\":" + String(heaterState2 ? "true" : "false") + ",";
   json += "\"unit\":{\"flowRate\":\"L/min\",\"total\":\"L\",\"temperature\":\"C\",\"pressure\":\"MPa\",\"level\":\"%\",\"light\":\"lx\"},";
   json += "\"lastUpdateMs\":" + String(millis() - lastSampleMs);
   json += "}";
@@ -298,6 +305,31 @@ void handleHeaterState() {
   sendJson(200, json);
 }
 
+// GET /api/heater2/on —— 开第二个加热
+void handleHeater2On() {
+  setHeater2(true);
+  sendJson(200, "{\"status\":\"ok\",\"heater2\":true}");
+}
+
+// GET /api/heater2/off —— 关第二个加热
+void handleHeater2Off() {
+  setHeater2(false);
+  sendJson(200, "{\"status\":\"ok\",\"heater2\":false}");
+}
+
+// GET /api/heater2/toggle —— 切换第二个加热开关
+void handleHeater2Toggle() {
+  setHeater2(!heaterState2);
+  String json = "{\"status\":\"ok\",\"heater2\":" + String(heaterState2 ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
+// GET /api/heater2/state —— 查询第二个加热状态
+void handleHeater2State() {
+  String json = "{\"heater2\":" + String(heaterState2 ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
 // GET /api/health —— 服务器状态
 void handleHealth() {
   String json = "{";
@@ -324,6 +356,7 @@ void handleHealth() {
   json += "\"pump2\":" + String(pumpState2 ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false");
+  json += ",\"heater2\":" + String(heaterState2 ? "true" : "false");
   json += "}";
   sendJson(200, json);
 }
@@ -359,6 +392,10 @@ void registerRoutes() {
   server.on("/api/heater/off", handleHeaterOff);
   server.on("/api/heater/toggle", handleHeaterToggle);
   server.on("/api/heater/state", handleHeaterState);
+  server.on("/api/heater2/on", handleHeater2On);
+  server.on("/api/heater2/off", handleHeater2Off);
+  server.on("/api/heater2/toggle", handleHeater2Toggle);
+  server.on("/api/heater2/state", handleHeater2State);
   server.on("/api/health", handleHealth);
   server.onNotFound(handleNotFound);
 }

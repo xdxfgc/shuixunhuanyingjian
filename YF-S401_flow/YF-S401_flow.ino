@@ -20,6 +20,7 @@
 //   relay.cpp           —— 继电器/水泵控制（D32）
 //   relay2.cpp          —— 第二路继电器/水泵控制（D14）
 //   heater.cpp          —— 加热继电器控制（D26）
+//   heater2.cpp         —— 第二路加热继电器控制（D16）
 //   temp_sensor.cpp     —— DS18B20 水温（D27，非阻塞读取）
 //   temp_sensor2.cpp    —— DS18B20 水温 #2（D25，非阻塞读取）
 //   pressure_sensor.cpp —— 压力传感器（D33，模拟读取）
@@ -57,6 +58,7 @@ bool pumpState = false;                  // 水泵当前状态：true=开
 bool pumpState2 = false;                 // 水泵2 当前状态：true=开（D14）
 float pumpTargetLiters = 0.0;            // 定量浇水量 L
 bool heaterState = false;                // 加热模块当前状态：true=开
+bool heaterState2 = false;               // 加热2 当前状态：true=开（D16）
 float lastWaterTemp = NAN;               // 水温 ℃，无效时为 NAN
 bool tempOk = false;                     // 温度读数是否有效
 float lastWaterTemp2 = NAN;              // 水温2 ℃，无效时为 NAN
@@ -93,6 +95,7 @@ void setup() {
   initRelay();
   initRelay2();
   initHeaterRelay();
+  initHeaterRelay2();
   initTempSensor();
   initTempSensor2();
   initPressureSensor();
@@ -197,6 +200,8 @@ void loop() {
     Serial.print(pumpState2 ? "开" : "关");
     Serial.print("  加热: ");
     Serial.print(heaterState ? "开" : "关");
+    Serial.print("  加热2: ");
+    Serial.print(heaterState2 ? "开" : "关");
     Serial.print("  水位(%): ");
     Serial.print(levelOk ? String(lastLevelPercent, 1) : "无效");
     Serial.print(" 高度: ");
