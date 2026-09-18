@@ -11,6 +11,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 - GY-302 / BH1750 光照检测（I2C D21/D22）
 - WiFi 联网（固定 IP + mDNS）
 - 网页控制继电器水泵（D32）开关
+- 网页控制第二路继电器水泵（D14）开关
 - 网页控制加热继电器（D26）开关
 - 定量浇水：累计水量达到设定值自动关泵
 - HTTP 接口，方便其他设备取数据 / 控制
@@ -26,6 +27,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
   （Echo 输出 5V，必须分压；3.3V 版本模块如 RCWL-1601 可直连）
 - GY-302 光照：VCC → 3.3V，GND → GND，SDA → D21，SCL → D22（模块自带上拉，无需外接）
 - 继电器（WKY-1-RELAY-1）：DC+ → 5V，DC- → GND，IN → D32，跳线帽拨到 H（高电平触发）
+- 第二路继电器（水泵2）：DC+ → 5V，DC- → GND，IN → **D14**，跳线帽拨到 H（高电平触发）
 - 水泵：用独立电源，接继电器 COM/NO
 - 加热继电器：IN → D26；线圈用独立电源；12V 加热模块接继电器 COM/NO
 
@@ -51,6 +53,10 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/pump/toggle` | 切换 |
 | `GET /api/pump/state` | 水泵状态 |
 | `GET /api/pump/target?value=2.5` | 设定定量浇水量 |
+| `GET /api/pump2/on` | 开第二路水泵（D14） |
+| `GET /api/pump2/off` | 关第二路水泵 |
+| `GET /api/pump2/toggle` | 切换第二路水泵 |
+| `GET /api/pump2/state` | 第二路水泵状态 |
 | `GET /api/heater/on` | 开加热 |
 | `GET /api/heater/off` | 关加热 |
 | `GET /api/heater/toggle` | 切换加热 |
@@ -72,6 +78,7 @@ YF-S401_flow/
 ├── distance_sensor.cpp 超声波测距/水位模块（Trig D23 / Echo D18）
 ├── light_sensor.cpp    GY-302 光照模块（BH1750，I2C D21/D22）
 ├── relay.cpp          继电器/水泵控制模块（D32）
+├── relay2.cpp         第二路继电器/水泵控制模块（D14）
 ├── heater.cpp         加热继电器控制模块（D26）
 └── web_server.cpp     网页 + 所有 /api 接口 + 路由
 ```

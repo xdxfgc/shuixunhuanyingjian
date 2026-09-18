@@ -28,6 +28,9 @@ void handleRoot() {
   html += "<p>水泵状态：<b id='pump'>--</b></p>";
   html += "<button onclick=\"doPump(1)\">开水泵</button> ";
   html += "<button onclick=\"doPump(0)\">关水泵</button></p>";
+  html += "<p>水泵2状态：<b id='pump2'>--</b></p>";
+  html += "<button onclick=\"doPump2(1)\">开水泵2</button> ";
+  html += "<button onclick=\"doPump2(0)\">关水泵2</button></p>";
   html += "<p>加热状态：<b id='heater'>--</b></p>";
   html += "<button onclick=\"doHeater(1)\">开加热</button> ";
   html += "<button onclick=\"doHeater(0)\">关加热</button></p>";
@@ -60,6 +63,8 @@ void handleRoot() {
           "lx.innerText=(d.light!=null)?d.light.toFixed(0):'--';"
           "var p=document.getElementById('pump');"
           "p.innerText=d.pump?'运行中':'已停止';p.style.color=d.pump?'green':'red';"
+          "var p2el=document.getElementById('pump2');"
+          "p2el.innerText=d.pump2?'运行中':'已停止';p2el.style.color=d.pump2?'green':'red';"
           "var h=document.getElementById('heater');"
           "h.innerText=d.heater?'加热中':'已停止';h.style.color=d.heater?'orange':'gray';"
           "document.getElementById('pulses').innerText=d.pulsesInLastWindow;"
@@ -68,6 +73,7 @@ void handleRoot() {
           "else{document.getElementById('target').innerText='';}"
           "}).catch(function(){});}"
           "function doPump(on){fetch('/api/pump/'+(on?'on':'off')).then(refresh);}"
+          "function doPump2(on){fetch('/api/pump2/'+(on?'on':'off')).then(refresh);}"
           "function doHeater(on){fetch('/api/heater/'+(on?'on':'off')).then(refresh);}"
           "function doTarget(){fetch('/api/pump/target?value='+document.getElementById('tgt').value).then(refresh);}"
           "refresh();setInterval(refresh,2000);"
@@ -99,6 +105,7 @@ void handleData() {
   json += "\"light\":" + String(lightOk ? String(lastLux, 1) : String("null")) + ",";
   json += "\"lightOk\":" + String(lightOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
+  json += "\"pump2\":" + String(pumpState2 ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false") + ",";
   json += "\"unit\":{\"flowRate\":\"L/min\",\"total\":\"L\",\"temperature\":\"C\",\"pressure\":\"MPa\",\"level\":\"%\",\"light\":\"lx\"},";
@@ -241,6 +248,31 @@ void handlePumpTarget() {
   sendJson(200, json);
 }
 
+// GET /api/pump2/on —— 开第二个水泵
+void handlePump2On() {
+  setPump2(true);
+  sendJson(200, "{\"status\":\"ok\",\"pump2\":true}");
+}
+
+// GET /api/pump2/off —— 关第二个水泵
+void handlePump2Off() {
+  setPump2(false);
+  sendJson(200, "{\"status\":\"ok\",\"pump2\":false}");
+}
+
+// GET /api/pump2/toggle —— 切换第二个水泵开关
+void handlePump2Toggle() {
+  setPump2(!pumpState2);
+  String json = "{\"status\":\"ok\",\"pump2\":" + String(pumpState2 ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
+// GET /api/pump2/state —— 查询第二个水泵状态
+void handlePump2State() {
+  String json = "{\"pump2\":" + String(pumpState2 ? "true" : "false") + "}";
+  sendJson(200, json);
+}
+
 // GET /api/heater/on —— 开加热
 void handleHeaterOn() {
   setHeater(true);
@@ -289,6 +321,7 @@ void handleHealth() {
   json += "\"light\":" + String(lightOk ? String(lastLux, 1) : String("null")) + ",";
   json += "\"lightOk\":" + String(lightOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
+  json += "\"pump2\":" + String(pumpState2 ? "true" : "false") + ",";
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false");
   json += "}";
@@ -318,6 +351,10 @@ void registerRoutes() {
   server.on("/api/pump/toggle", handlePumpToggle);
   server.on("/api/pump/state", handlePumpState);
   server.on("/api/pump/target", handlePumpTarget);
+  server.on("/api/pump2/on", handlePump2On);
+  server.on("/api/pump2/off", handlePump2Off);
+  server.on("/api/pump2/toggle", handlePump2Toggle);
+  server.on("/api/pump2/state", handlePump2State);
   server.on("/api/heater/on", handleHeaterOn);
   server.on("/api/heater/off", handleHeaterOff);
   server.on("/api/heater/toggle", handleHeaterToggle);

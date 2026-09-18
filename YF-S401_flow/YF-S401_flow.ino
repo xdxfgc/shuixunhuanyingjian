@@ -11,12 +11,14 @@
 //   超声波测距 VCC->5V  GND->GND  Trig->D23  Echo->1kΩ->D18->2kΩ->GND（5V 必须分压）
 //   GY-302 光照 VCC->3.3V  GND->GND  SDA->D21  SCL->D22
 //   加热继电器 IN->D26，线圈用独立电源，12V 加热模块接继电器 COM/NO
+//   第二路继电器（水泵2） DC+->5V  DC-->GND  IN->D14  跳线帽拨到 H
 //   水泵用独立电源，接继电器 COM/NO，不要从 ESP32 的 5V 引脚取电
 //
 // 结构：
 //   config.h            —— 引脚、常量、共享变量、模块接口声明
 //   flow_sensor.cpp     —— 流量检测（D34 中断计数、结算）
 //   relay.cpp           —— 继电器/水泵控制（D32）
+//   relay2.cpp          —— 第二路继电器/水泵控制（D14）
 //   heater.cpp          —— 加热继电器控制（D26）
 //   temp_sensor.cpp     —— DS18B20 水温（D27，非阻塞读取）
 //   temp_sensor2.cpp    —— DS18B20 水温 #2（D25，非阻塞读取）
@@ -52,6 +54,7 @@ unsigned long lastWindowMs = 0;          // 上次结算实际用时 ms
 unsigned long lastWindowPulses = 0;      // 上次窗口内脉冲数
 unsigned long startTime = 0;
 bool pumpState = false;                  // 水泵当前状态：true=开
+bool pumpState2 = false;                 // 水泵2 当前状态：true=开（D14）
 float pumpTargetLiters = 0.0;            // 定量浇水量 L
 bool heaterState = false;                // 加热模块当前状态：true=开
 float lastWaterTemp = NAN;               // 水温 ℃，无效时为 NAN
@@ -88,6 +91,7 @@ void setup() {
   // 模块初始化
   initFlowSensor();
   initRelay();
+  initRelay2();
   initHeaterRelay();
   initTempSensor();
   initTempSensor2();
@@ -189,6 +193,8 @@ void loop() {
     Serial.print("V]");
     Serial.print("  水泵: ");
     Serial.print(pumpState ? "开" : "关");
+    Serial.print("  水泵2: ");
+    Serial.print(pumpState2 ? "开" : "关");
     Serial.print("  加热: ");
     Serial.print(heaterState ? "开" : "关");
     Serial.print("  水位(%): ");

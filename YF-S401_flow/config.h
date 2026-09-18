@@ -49,6 +49,11 @@ extern unsigned long startTime;
 extern bool pumpState;          // 水泵当前状态：true=开
 extern float pumpTargetLiters;  // 定量浇水量 L，>0 时累计达到即自动关泵；0=不限
 
+// ---------------- 继电器水泵 #2 ----------------
+#define RELAY2_PIN 14           // D14，第二个继电器的 IN
+#define RELAY2_ACTIVE_HIGH 1    // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
+extern bool pumpState2;         // 水泵2 当前状态：true=开
+
 // ---------------- 电磁继电器 / 加热模块 ----------------
 #define HEATER_PIN 26            // D26，加热继电器信号线 IN
 #define HEATER_ACTIVE_HIGH 1     // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
@@ -157,6 +162,10 @@ void resetTotal();
 void initRelay();
 void setPump(bool on);
 
+// 第二路继电器模块
+void initRelay2();
+void setPump2(bool on);
+
 // 加热继电器模块
 void initHeaterRelay();
 void setHeater(bool on);
@@ -195,6 +204,10 @@ void handlePumpOff();
 void handlePumpToggle();
 void handlePumpState();
 void handlePumpTarget();
+void handlePump2On();
+void handlePump2Off();
+void handlePump2Toggle();
+void handlePump2State();
 void handleHeaterOn();
 void handleHeaterOff();
 void handleHeaterToggle();
