@@ -45,6 +45,19 @@ extern unsigned long lastWindowPulses;     // 上次窗口内脉冲数
 extern unsigned long startTime;
 extern unsigned long wifiReconnectCount;  // WiFi 断线重连次数（诊断用）
 
+// ---------------- 第二路 YF-S401 流量传感器 ----------------
+#define FLOW2_PIN 19                // D19，信号输入（经分压后接入）
+#define PULSES_PER_LITER2 7.5       // 第二路系数：7.5 脉冲/秒 = 1L/min（实测后可调）
+#define SAMPLE_INTERVAL_MS2 1000UL  // 每 1 秒结算一次
+
+extern volatile unsigned long pulseCount2;  // 第二路中断累计脉冲数
+extern float lastFlowRate2;                 // 第二路瞬时流量 L/min
+extern float totalLiters2;                  // 第二路累计水量 L
+extern unsigned long lastPulseCount2;       // 第二路上次结算时的脉冲计数
+extern unsigned long lastSampleMs2;         // 第二路上次结算时刻
+extern unsigned long lastWindowMs2;         // 第二路上次结算实际用时 ms
+extern unsigned long lastWindowPulses2;     // 第二路上次窗口内脉冲数
+
 // ---------------- 继电器水泵 ----------------
 #define RELAY_PIN 32            // D32，继电器 IN
 #define RELAY_ACTIVE_HIGH 1     // 1=高电平触发(跳线帽在H)；0=低电平触发(跳线帽在L)
@@ -182,6 +195,12 @@ unsigned long readPulseCount();
 void sampleFlow();
 void resetTotal();
 
+// 第二路流量传感器模块
+void initFlowSensor2();
+unsigned long readPulseCount2();
+void sampleFlow2();
+void resetTotal2();
+
 // 继电器模块
 void initRelay();
 void setPump(bool on);
@@ -220,6 +239,18 @@ void setTankHeightMm2(float mm);
 void initLightSensor();
 void processLightSensor();
 
+// 数据上报模块（主动推送到后端）
+//   后端地址、账号、上报周期都在 report_uploader.cpp 顶部
+extern unsigned long uploadOkCount;     // 上报成功次数
+extern unsigned long uploadFailCount;   // 上报失败次数
+extern bool lastUploadOk;               // 上次是否成功
+extern unsigned long lastUploadOkMs;    // 上次成功时刻（millis）
+extern String lastUploadMsg;            // 上次结果说明
+extern bool backendTokenOk;             // 是否已登录拿到 token
+
+void initUploader();
+void processUploader();
+
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
 const char* resetReasonText();   // 上次复位原因（诊断用）
@@ -228,6 +259,9 @@ void handleData();
 void handleFlow();
 void handleVolume();
 void handleReset();
+void handleFlow2();
+void handleVolume2();
+void handleReset2();
 void handleTemperature();
 void handleTemperature2();
 void handlePressure();

@@ -40,6 +40,7 @@ void handleRoot() {
   html += "<h1>YF-S401 水流量检测</h1>";
   html += "<p>瞬时流量：<b id='rate'>--</b> L/min</p>";
   html += "<p>累计水量：<b id='total'>--</b> L <span id='target'></span></p>";
+  html += "<p>流量2：<b id='rate2'>--</b> L/min ｜ 累计2：<b id='total2'>--</b> L</p>";
   html += "<p>水温：<b id='temp'>--</b> ℃</p>";
   html += "<p>水温2：<b id='temp2'>--</b> ℃</p>";
   html += "<p>压力：<b id='pressure'>--</b> MPa</p>";
@@ -62,12 +63,15 @@ void handleRoot() {
   html += "<button onclick=\"doTarget()\">设定</button></p>";
   html += "<p>上一窗口脉冲数：<b id='pulses'>--</b>，用时 <b id='win'>--</b> ms</p>";
   html += "<button onclick=\"fetch('/api/reset').then(refresh)\">清零累计水量</button>";
+  html += "<button onclick=\"fetch('/api/reset2').then(refresh)\">清零累计水量2</button>";
   html += "<p><a href='/api/data'>查看 JSON 数据</a></p>";
   html += "<script>"
           "function refresh(){"
           "fetch('/api/data').then(function(r){return r.json()}).then(function(d){"
           "document.getElementById('rate').innerText=d.flowRate.toFixed(2);"
           "document.getElementById('total').innerText=d.totalLiters.toFixed(3);"
+          "document.getElementById('rate2').innerText=d.flowRate2.toFixed(2);"
+          "document.getElementById('total2').innerText=d.totalLiters2.toFixed(3);"
           "var t=document.getElementById('temp');"
           "t.innerText=(d.temperature!=null)?d.temperature.toFixed(1):'--';"
           "var t2=document.getElementById('temp2');"
@@ -122,6 +126,8 @@ void handleData() {
   json += "\"status\":\"ok\",";
   json += "\"flowRate\":" + String(lastFlowRate, 2) + ",";
   json += "\"totalLiters\":" + String(totalLiters, 3) + ",";
+  json += "\"flowRate2\":" + String(lastFlowRate2, 2) + ",";
+  json += "\"totalLiters2\":" + String(totalLiters2, 3) + ",";
   json += "\"pulsesInLastWindow\":" + String(lastWindowPulses) + ",";
   json += "\"temperature\":" + String(tempOk ? String(lastWaterTemp, 1) : String("null")) + ",";
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
@@ -280,6 +286,25 @@ void handleReset() {
   sendJson(200, json);
 }
 
+// GET /api/flow2 —— 第二路瞬时流量
+void handleFlow2() {
+  String json = "{\"value\":" + String(lastFlowRate2, 2) + ",\"unit\":\"L/min\"}";
+  sendJson(200, json);
+}
+
+// GET /api/volume2 —— 第二路累计水量
+void handleVolume2() {
+  String json = "{\"value\":" + String(totalLiters2, 3) + ",\"unit\":\"L\"}";
+  sendJson(200, json);
+}
+
+// GET /api/reset2 —— 清零第二路累计水量
+void handleReset2() {
+  resetTotal2();
+  String json = "{\"status\":\"ok\",\"totalLiters2\":" + String(totalLiters2, 3) + "}";
+  sendJson(200, json);
+}
+
 // GET /api/pump/on —— 开水泵
 void handlePumpOn() {
   setPump(true);
@@ -404,6 +429,8 @@ void handleHealth() {
   json += "\"rssi\":" + String(WiFi.RSSI()) + ",";
   json += "\"flowRate\":" + String(lastFlowRate, 2) + ",";
   json += "\"totalLiters\":" + String(totalLiters, 3) + ",";
+  json += "\"flowRate2\":" + String(lastFlowRate2, 2) + ",";
+  json += "\"totalLiters2\":" + String(totalLiters2, 3) + ",";
   json += "\"temperature\":" + String(tempOk ? String(lastWaterTemp, 1) : String("null")) + ",";
   json += "\"tempOk\":" + String(tempOk ? "true" : "false") + ",";
   json += "\"temperature2\":" + String(tempOk2 ? String(lastWaterTemp2, 1) : String("null")) + ",";
@@ -431,6 +458,13 @@ void handleHealth() {
   json += ",\"freeHeap\":" + String(ESP.getFreeHeap());              // 剩余内存（排查内存泄漏）
   json += ",\"minFreeHeap\":" + String(ESP.getMinFreeHeap());        // 历史最低剩余内存
   json += ",\"wifiReconnects\":" + String(wifiReconnectCount);       // WiFi 掉线重连次数
+  json += ",\"uploadOk\":" + String(uploadOkCount);                  // 上报成功次数
+  json += ",\"uploadFail\":" + String(uploadFailCount);              // 上报失败次数
+  json += ",\"uploadOkNow\":" + String(lastUploadOk ? "true" : "false");
+  String msgSafe = lastUploadMsg;                                    // 转义引号，避免破坏 JSON
+  msgSafe.replace("\"", "'");
+  json += ",\"uploadMsg\":\"" + msgSafe + "\"";                      // 上次上报结果
+  json += ",\"tokenOk\":" + String(backendTokenOk ? "true" : "false"); // 后端登录状态
   json += "}";
   sendJson(200, json);
 }
@@ -447,6 +481,9 @@ void registerRoutes() {
   server.on("/api/flow", handleFlow);
   server.on("/api/volume", handleVolume);
   server.on("/api/reset", handleReset);
+  server.on("/api/flow2", handleFlow2);
+  server.on("/api/volume2", handleVolume2);
+  server.on("/api/reset2", handleReset2);
   server.on("/api/temperature", handleTemperature);
   server.on("/api/temperature2", handleTemperature2);
   server.on("/api/pressure", handlePressure);

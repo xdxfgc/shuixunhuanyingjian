@@ -5,6 +5,8 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 ## 功能
 
 - YF-S401 流量检测（D34）：瞬时流量（L/min）、累计过水总量（L）
+- 第二路 YF-S401 流量检测（D19）：瞬时流量、累计水量
+- 数据主动上报：每 1.5 秒把数据推送到后端 `/api/water/ingest`（免去轮询延迟）
 - DS18B20 防水探头水温检测 ×2（D27 / D25，非阻塞读取）
 - 压力传感器 0-1MPa 模拟输出检测（D33）
 - 超声波测距 → 水位检测（Trig D23 / Echo D18）：水位 = 预定高度 − 测距值
@@ -21,6 +23,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 ## 接线（详见 .ino 顶部注释）
 
 - YF-S401：红 → 5V，黑 → GND，黄（信号）→ 10kΩ 串到 D34，D34 再接 20kΩ 到 GND
+- 第二路 YF-S401：红 → 5V，黑 → GND，黄（信号）→ 10kΩ 串到 **D19**，D19 再接 20kΩ 到 GND
 - DS18B20 防水探头：红 → 3.3V，黑 → GND，黄（信号）→ D27（需 4.7kΩ 上拉到 3.3V）
 - DS18B20 #2 防水探头：红 → 3.3V，黑 → GND，黄（信号）→ D25（需 4.7kΩ 上拉到 3.3V）
 - 压力传感器（0-1MPa）：红 → 5V，黑 → GND，黄（信号）→ 10kΩ 串到 D33，D33 再接 20kΩ 到 GND
@@ -37,6 +40,17 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 
 依赖库：OneWire、DallasTemperature（Arduino IDE 库管理器安装）
 
+## 数据主动上报（push）
+
+- 后端地址、登录账号、上报周期都集中在 `report_uploader.cpp` **顶部**，要改只改那里
+- 每 1.5 秒推送一次：`flow_rate`、`total_liters`、`storage_temp`(水温2/储水槽)、
+  `heater_temp`(水温1/加热槽)、`pressure`、`light`
+- ⚠️ 后端要求压力单位是 **kPa**，代码里自动把传感器读到的 MPa **×1000** 再上报
+- ⚠️ 后端用 HTTP 200 返回业务码，代码里解析返回 JSON 的 `code` 字段判断成功与否
+- 上报状态可在 `/api/health` 查看：`uploadOk`、`uploadFail`、`uploadMsg`、`tokenOk`
+- ⚠️ **安全提醒**：登录账号密码写死在固件里，若仓库公开等于公开后台密码，建议改用
+  设备专用账号（只给上报权限），或把仓库设为私有
+
 ## HTTP 接口
 
 | 接口 | 说明 |
@@ -46,6 +60,9 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/flow` | 瞬时流量 |
 | `GET /api/volume` | 累计水量 |
 | `GET /api/reset` | 清零累计水量 |
+| `GET /api/flow2` | 第二路瞬时流量 |
+| `GET /api/volume2` | 第二路累计水量 |
+| `GET /api/reset2` | 清零第二路累计水量 |
 | `GET /api/temperature` | 水温（℃） |
 | `GET /api/temperature2` | 水温2（℃） |
 | `GET /api/pressure` | 压力（MPa，附 voltage 标定值） |
@@ -82,6 +99,8 @@ YF-S401_flow/
 ├── YF-S401_flow.ino   主文件：网络配置、全局变量、WiFi 连接、setup/loop
 ├── config.h           配置文件：引脚、常量、共享变量声明、模块接口
 ├── flow_sensor.cpp    流量检测模块（D34 中断计数、结算）
+├── flow_sensor2.cpp   第二路流量检测模块（D19）
+├── report_uploader.cpp 数据主动上报模块（推送后端 /api/water/ingest）
 ├── temp_sensor.cpp    水温检测模块（D27，DS18B20）
 ├── temp_sensor2.cpp   水温检测模块 #2（D25，DS18B20）
 ├── pressure_sensor.cpp 压力传感器模块（D33，0-1MPa 模拟）

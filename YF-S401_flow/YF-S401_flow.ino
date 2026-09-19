@@ -4,6 +4,7 @@
 //
 // 接线（详细说明见 README 和各模块顶部注释）：
 //   YF-S401 红(VCC)->5V  黑(GND)->GND  黄(信号)->10kΩ 串到 D34，D34 再接 20kΩ 到 GND
+//   YF-S401 #2 红(VCC)->5V  黑(GND)->GND  黄(信号)->10kΩ 串到 D19，D19 再接 20kΩ 到 GND
 //   WKY-1-RELAY-1 DC+->5V  DC-->GND  IN->D32  跳线帽拨到 H（高电平触发）
 //   DS18B20 防水探头 红->3.3V  黑->GND  黄(信号)->D27（需 4.7kΩ 上拉到 3.3V）
 //   DS18B20 #2 防水探头 红->3.3V  黑->GND  黄(信号)->D25（需 4.7kΩ 上拉到 3.3V）
@@ -18,6 +19,7 @@
 // 结构：
 //   config.h            —— 引脚、常量、共享变量、模块接口声明
 //   flow_sensor.cpp     —— 流量检测（D34 中断计数、结算）
+//   flow_sensor2.cpp    —— 第二路流量检测（D19）
 //   relay.cpp           —— 继电器/水泵控制（D32）
 //   relay2.cpp          —— 第二路继电器/水泵控制（D14）
 //   heater.cpp          —— 加热继电器控制（D26）
@@ -28,6 +30,7 @@
 //   distance_sensor.cpp —— 超声波测距测水位（Trig D23 / Echo D18；水位 = 预定高度 − 测距）
 //   distance_sensor2.cpp —— 第二路超声波测距测水位（Trig D4 / Echo D13）
 //   light_sensor.cpp    —— GY-302 光照传感器（BH1750，I2C D21/D22）
+//   report_uploader.cpp —— 数据主动上报（推送到后端 /api/water/ingest）
 //   web_server.cpp      —— 网页 + 所有 /api 接口
 // ============================================================
 #include "config.h"
@@ -55,6 +58,13 @@ unsigned long lastPulseCount = 0;        // 上次结算时的脉冲计数
 unsigned long lastSampleMs = 0;          // 上次结算时刻
 unsigned long lastWindowMs = 0;          // 上次结算实际用时 ms
 unsigned long lastWindowPulses = 0;      // 上次窗口内脉冲数
+volatile unsigned long pulseCount2 = 0;  // 第二路中断累计脉冲数
+float lastFlowRate2 = 0.0;               // 第二路瞬时流量 L/min
+float totalLiters2 = 0.0;                // 第二路累计水量 L
+unsigned long lastPulseCount2 = 0;       // 第二路上次结算时的脉冲计数
+unsigned long lastSampleMs2 = 0;         // 第二路上次结算时刻
+unsigned long lastWindowMs2 = 0;         // 第二路上次结算实际用时 ms
+unsigned long lastWindowPulses2 = 0;     // 第二路上次窗口内脉冲数
 unsigned long startTime = 0;
 unsigned long lastReconnectMs = 0;        // WiFi 断线重连计时
 unsigned long lastWifiReportMs = 0;       // WiFi 状态打印计时
@@ -108,6 +118,7 @@ void setup() {
 
   // 模块初始化
   initFlowSensor();
+  initFlowSensor2();
   initRelay();
   initRelay2();
   initHeaterRelay();
@@ -151,6 +162,9 @@ void setup() {
   if (MDNS.begin(MDNS_NAME)) {
     Serial.println("mDNS 已启用：http://" + String(MDNS_NAME) + ".local");
   }
+
+  // 数据上报模块（WiFi 已连上再启动）
+  initUploader();
 
   // 开机信号可能不稳定（D34 浮空 / 传感器未稳），等 1 秒后清零，忽略启动噪声
   delay(1000);
@@ -249,6 +263,17 @@ void loop() {
     Serial.println(lightOk ? String(lastLux, 1) : "无效");
   }
 
+  // 第二路流量：每 1 秒结算一次（独立计时，互不影响）
+  if (millis() - lastSampleMs2 >= SAMPLE_INTERVAL_MS2) {
+    sampleFlow2();
+    Serial.print("[流量2] ");
+    Serial.print(lastFlowRate2);
+    Serial.print(" L/min  累计2: ");
+    Serial.print(totalLiters2);
+    Serial.print(" L  脉冲2: ");
+    Serial.println(lastWindowPulses2);
+  }
+
   // ---- WiFi 掉线自动重连 + 状态监控 ----
   // 手机热点容易短暂断开：每 5 秒尝试重连一次，连上后每 10 秒报一次状态
   if (WiFi.status() != WL_CONNECTED) {
@@ -267,4 +292,7 @@ void loop() {
 
   // 处理 HTTP 请求
   server.handleClient();
+
+  // 数据上报（每 1.5 秒推送一次到后端；内部自己控制节奏）
+  processUploader();
 }
