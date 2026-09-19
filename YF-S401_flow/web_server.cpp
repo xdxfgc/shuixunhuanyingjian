@@ -10,6 +10,26 @@ void sendJson(int code, const String& json) {
   server.send(code, "application/json; charset=utf-8", json);
 }
 
+// 上次复位原因（诊断用）：ESP32 内部记录了上次为什么重启
+//   poweron  = 正常上电        brownout = 掉电复位（供电不足，继电器/水泵动作时最常见）
+//   panic    = 程序崩溃        task_wdt = 任务看门狗超时
+//   software = 软件主动重启
+const char* resetReasonText() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "poweron";
+    case ESP_RST_EXT:       return "external";
+    case ESP_RST_SW:        return "software";
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "int_wdt";
+    case ESP_RST_TASK_WDT:  return "task_wdt";
+    case ESP_RST_WDT:       return "wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    case ESP_RST_SDIO:      return "sdio";
+    default:                return "unknown";
+  }
+}
+
 // GET /  —— 网页状态页（JS 定时刷新，点按钮不整页跳转）
 void handleRoot() {
   String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
@@ -24,6 +44,7 @@ void handleRoot() {
   html += "<p>水温2：<b id='temp2'>--</b> ℃</p>";
   html += "<p>压力：<b id='pressure'>--</b> MPa</p>";
   html += "<p>水位：<b id='level'>--</b> % / <b id='levelmm'>--</b> cm <span id='leveldist'></span> <span id='levelwarn' style='color:red'></span></p>";
+  html += "<p>水位2：<b id='level2'>--</b> % / <b id='levelmm2'>--</b> cm <span id='leveldist2'></span></p>";
   html += "<p>光照：<b id='light'>--</b> lx </p>";
   html += "<p>水泵状态：<b id='pump'>--</b></p>";
   html += "<button onclick=\"doPump(1)\">开水泵</button> ";
@@ -60,6 +81,13 @@ void handleRoot() {
           "var ld=document.getElementById('leveldist');"
           "ld.innerText=(d.distanceMm!=null)?('（测距 '+(d.distanceMm/10).toFixed(1)+' cm）'):'';"
           "ld.style.color='gray';"
+          "var lv2=document.getElementById('level2');"
+          "lv2.innerText=(d.level2!=null)?d.level2.toFixed(1):'--';"
+          "var lm2=document.getElementById('levelmm2');"
+          "lm2.innerText=(d.levelMm2!=null)?(d.levelMm2/10).toFixed(1):'--';"
+          "var ld2=document.getElementById('leveldist2');"
+          "ld2.innerText=(d.distanceMm2!=null)?('（测距 '+(d.distanceMm2/10).toFixed(1)+' cm）'):'';"
+          "ld2.style.color='gray';"
           "var lw=document.getElementById('levelwarn');"
           "lw.innerText=(d.ok===false)?'（测距无效：检查 Echo 分压接线/传感器朝向/预定高度）':'';"
           "var lx=document.getElementById('light');"
@@ -108,6 +136,11 @@ void handleData() {
   json += "\"distanceOk\":" + String(distanceOk ? "true" : "false") + ",";
   json += "\"tankHeightMm\":" + String(tankHeightMm, 1) + ",";
   json += "\"echoUs\":" + String(lastEchoUs, 0) + ",";
+  json += "\"level2\":" + String(levelOk2 ? String(lastLevelPercent2, 1) : String("null")) + ",";
+  json += "\"levelOk2\":" + String(levelOk2 ? "true" : "false") + ",";
+  json += "\"levelMm2\":" + String(levelOk2 ? String(lastLevelMm2, 1) : String("null")) + ",";
+  json += "\"distanceMm2\":" + String(distanceOk2 ? String(lastDistanceMm2, 1) : String("null")) + ",";
+  json += "\"tankHeightMm2\":" + String(tankHeightMm2, 1) + ",";
   json += "\"light\":" + String(lightOk ? String(lastLux, 1) : String("null")) + ",";
   json += "\"lightOk\":" + String(lightOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
@@ -154,6 +187,38 @@ void handleLevelHeight() {
   }
   String json = "{\"status\":\"ok\",\"tankHeightMm\":" + String(tankHeightMm, 1) +
                 ",\"hint\":\"用法 /api/level/height?value=250（单位毫米，= 传感器到箱底的距离）\"}";
+  sendJson(200, json);
+}
+
+// GET /api/level2 —— 水位2（第二路超声波换算）
+void handleLevel2() {
+  String json = "{\"value\":" + String(levelOk2 ? String(lastLevelPercent2, 1) : String("null")) +
+                ",\"unit\":\"%\"," +
+                "\"levelMm\":" + String(levelOk2 ? String(lastLevelMm2, 1) : String("null")) + "," +
+                "\"levelCm\":" + String(levelOk2 ? String(lastLevelMm2 / 10.0, 2) : String("null")) + "," +
+                "\"distanceMm\":" + String(distanceOk2 ? String(lastDistanceMm2, 1) : String("null")) + "," +
+                "\"tankHeightMm\":" + String(tankHeightMm2, 1) + "," +
+                "\"ok\":" + String(levelOk2 ? "true" : "false") + "," +
+                "\"distanceOk\":" + String(distanceOk2 ? "true" : "false") + "," +
+                "\"echoUs\":" + String(lastEchoUs2, 0) + "}";
+  sendJson(levelOk2 ? 200 : 503, json);
+}
+
+// GET /api/level2/height?value=100 —— 设置水位2 的预定高度（毫米，写 NVS）
+void handleLevelHeight2() {
+  if (server.hasArg("value")) {
+    float v = server.arg("value").toFloat();
+    if (v >= 10.0 && v <= 5000.0) {
+      setTankHeightMm2(v);
+      String json = "{\"status\":\"ok\",\"tankHeightMm\":" + String(tankHeightMm2, 1) + "}";
+      sendJson(200, json);
+      return;
+    }
+    sendJson(400, "{\"status\":\"error\",\"message\":\"value must be 10..5000 (mm)\"}");
+    return;
+  }
+  String json = "{\"status\":\"ok\",\"tankHeightMm\":" + String(tankHeightMm2, 1) +
+                ",\"hint\":\"用法 /api/level2/height?value=100（单位毫米，= 2号传感器到箱底的距离）\"}";
   sendJson(200, json);
 }
 
@@ -350,6 +415,11 @@ void handleHealth() {
   json += "\"levelMm\":" + String(levelOk ? String(lastLevelMm, 1) : String("null")) + ",";
   json += "\"distanceMm\":" + String(distanceOk ? String(lastDistanceMm, 1) : String("null")) + ",";
   json += "\"tankHeightMm\":" + String(tankHeightMm, 1) + ",";
+  json += "\"level2\":" + String(levelOk2 ? String(lastLevelPercent2, 1) : String("null")) + ",";
+  json += "\"levelOk2\":" + String(levelOk2 ? "true" : "false") + ",";
+  json += "\"levelMm2\":" + String(levelOk2 ? String(lastLevelMm2, 1) : String("null")) + ",";
+  json += "\"distanceMm2\":" + String(distanceOk2 ? String(lastDistanceMm2, 1) : String("null")) + ",";
+  json += "\"tankHeightMm2\":" + String(tankHeightMm2, 1) + ",";
   json += "\"light\":" + String(lightOk ? String(lastLux, 1) : String("null")) + ",";
   json += "\"lightOk\":" + String(lightOk ? "true" : "false") + ",";
   json += "\"pump\":" + String(pumpState ? "true" : "false") + ",";
@@ -357,6 +427,10 @@ void handleHealth() {
   json += "\"pumpTarget\":" + String(pumpTargetLiters, 2) + ",";
   json += "\"heater\":" + String(heaterState ? "true" : "false");
   json += ",\"heater2\":" + String(heaterState2 ? "true" : "false");
+  json += ",\"resetReason\":\"" + String(resetReasonText()) + "\"";  // 上次复位原因
+  json += ",\"freeHeap\":" + String(ESP.getFreeHeap());              // 剩余内存（排查内存泄漏）
+  json += ",\"minFreeHeap\":" + String(ESP.getMinFreeHeap());        // 历史最低剩余内存
+  json += ",\"wifiReconnects\":" + String(wifiReconnectCount);       // WiFi 掉线重连次数
   json += "}";
   sendJson(200, json);
 }
@@ -378,6 +452,8 @@ void registerRoutes() {
   server.on("/api/pressure", handlePressure);
   server.on("/api/level", handleLevel);
   server.on("/api/level/height", handleLevelHeight);
+  server.on("/api/level2", handleLevel2);
+  server.on("/api/level2/height", handleLevelHeight2);
   server.on("/api/light", handleLight);
   server.on("/api/pump/on", handlePumpOn);
   server.on("/api/pump/off", handlePumpOff);

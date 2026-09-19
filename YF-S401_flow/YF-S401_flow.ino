@@ -26,6 +26,7 @@
 //   temp_sensor2.cpp    —— DS18B20 水温 #2（D25，非阻塞读取）
 //   pressure_sensor.cpp —— 压力传感器（D33，模拟读取）
 //   distance_sensor.cpp —— 超声波测距测水位（Trig D23 / Echo D18；水位 = 预定高度 − 测距）
+//   distance_sensor2.cpp —— 第二路超声波测距测水位（Trig D4 / Echo D13）
 //   light_sensor.cpp    —— GY-302 光照传感器（BH1750，I2C D21/D22）
 //   web_server.cpp      —— 网页 + 所有 /api 接口
 // ============================================================
@@ -57,6 +58,7 @@ unsigned long lastWindowPulses = 0;      // 上次窗口内脉冲数
 unsigned long startTime = 0;
 unsigned long lastReconnectMs = 0;        // WiFi 断线重连计时
 unsigned long lastWifiReportMs = 0;       // WiFi 状态打印计时
+unsigned long wifiReconnectCount = 0;     // WiFi 断线重连次数（诊断用）
 bool pumpState = false;                  // 水泵当前状态：true=开
 bool pumpState2 = false;                 // 水泵2 当前状态：true=开（D14）
 float pumpTargetLiters = 0.0;            // 定量浇水量 L
@@ -78,6 +80,13 @@ float tankHeightMm = TANK_HEIGHT_MM;     // ★预定高度：传感器出光面
 float lastLevelMm = 0.0;                 // 水位高度 mm = 预定高度 − 测距值
 float lastLevelPercent = 0.0;            // 水位 0~100 %
 bool levelOk = false;                    // 水位是否有效
+float lastDistanceMm2 = 0.0;             // 测距值 mm（传感器2 → 水面）
+float lastEchoUs2 = 0.0;                 // 回声脉冲宽度 µs（第二路）
+bool distanceOk2 = false;                // 测距2是否有效
+float tankHeightMm2 = TANK_HEIGHT_MM2;   // 水位2 预定高度（探头面 → 箱底）
+float lastLevelMm2 = 0.0;                // 水位2 高度 mm
+float lastLevelPercent2 = 0.0;           // 水位2 百分比
+bool levelOk2 = false;                   // 水位2 是否有效
 float lastLux = 0.0;                     // 光照强度 lx
 bool lightOk = false;                    // 光照读数是否有效
 unsigned long lastAdcDumpMs = 0;         // 接线自检输出计时（ADC_DEBUG_DUMP=1 时用）
@@ -93,6 +102,10 @@ void setup() {
   delay(500);
   startTime = millis();
 
+  // ★ 开机打印「上次为什么重启」：poweron=正常上电，brownout=掉电复位(供电不足)，
+  //   panic=程序崩溃，task_wdt=看门狗超时 —— 用来定位「掉线又自己恢复」的原因
+  Serial.printf("[启动] 上次复位原因: %s\n", resetReasonText());
+
   // 模块初始化
   initFlowSensor();
   initRelay();
@@ -103,6 +116,7 @@ void setup() {
   initTempSensor2();
   initPressureSensor();
   initDistanceSensor();
+  initDistanceSensor2();
   initLightSensor();
 
   // 连接 WiFi（固定 IP）
@@ -155,6 +169,7 @@ void loop() {
   processTempSensor2();
   processPressureSensor();
   processDistanceSensor();
+  processDistanceSensor2();
   processLightSensor();
 
 #if ADC_DEBUG_DUMP
@@ -223,6 +238,13 @@ void loop() {
     Serial.print("us] 预定高度: ");
     Serial.print(tankHeightMm, 1);
     Serial.print("mm");
+    Serial.print("  水位2(%): ");
+    Serial.print(levelOk2 ? String(lastLevelPercent2, 1) : "无效");
+    Serial.print(" 测距2: ");
+    Serial.print(distanceOk2 ? String(lastDistanceMm2, 1) : "无效");
+    Serial.print("mm [回声2 ");
+    Serial.print(lastEchoUs2, 0);
+    Serial.print("us]");
     Serial.print("  光照(lx): ");
     Serial.println(lightOk ? String(lastLux, 1) : "无效");
   }
@@ -233,6 +255,7 @@ void loop() {
     if (millis() - lastReconnectMs >= 5000) {
       lastReconnectMs = millis();
       Serial.println("WiFi 断开，正在重连...");
+      wifiReconnectCount++;
       WiFi.disconnect();
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }

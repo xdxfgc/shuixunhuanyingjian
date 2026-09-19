@@ -17,6 +17,7 @@
 #include <Preferences.h>      // 液位标定值掉电保存（NVS）
 #include <OneWire.h>          // DS18B20 单总线
 #include <DallasTemperature.h> // DS18B20 温度读取
+#include <esp_system.h>       // esp_reset_reason()（查上次复位原因）
 
 // ---------------- 网络配置（在这里改 SSID/密码/IP） ----------------
 // ⚠️ 标准 ESP32 只支持 2.4GHz WiFi，不支持 5GHz 频段！
@@ -42,6 +43,7 @@ extern unsigned long lastSampleMs;         // 上次结算时刻
 extern unsigned long lastWindowMs;         // 上次结算实际用时 ms
 extern unsigned long lastWindowPulses;     // 上次窗口内脉冲数
 extern unsigned long startTime;
+extern unsigned long wifiReconnectCount;  // WiFi 断线重连次数（诊断用）
 
 // ---------------- 继电器水泵 ----------------
 #define RELAY_PIN 32            // D32，继电器 IN
@@ -129,6 +131,23 @@ extern float lastLevelMm;          // 水位高度 mm = 预定高度 − 测距�
 extern float lastLevelPercent;     // 水位 0~100 %
 extern bool levelOk;               // 水位是否有效（跟随测距是否有效）
 
+// ---------------- 超声波测距 #2（Trig D4 / Echo D13）----------------
+#define ULTRASONIC2_TRIG_PIN 4        // D4，Trig（数字输出）
+#define ULTRASONIC2_ECHO_PIN 13       // D13，Echo（数字输入，经分压）
+// 采样间隔、超时余量、中位数样本数复用第一路的宏
+
+// ★ 水位2 的预定高度（毫米）：探头面 → 箱底
+//   换箱子或用 /api/level2/height?value=100 修改（存 NVS，掉电不丢）
+#define TANK_HEIGHT_MM2 100.0
+
+extern float lastDistanceMm2;      // 测距值 mm（传感器2 → 水面）
+extern float lastEchoUs2;          // 回声脉冲宽度 µs（0 = 没收到回波）
+extern bool distanceOk2;           // 测距2是否有效
+extern float tankHeightMm2;        // 水位2 当前预定高度 mm
+extern float lastLevelMm2;         // 水位2 高度 mm
+extern float lastLevelPercent2;    // 水位2 百分比
+extern bool levelOk2;              // 水位2 是否有效
+
 // ---------------- GY-302 光照传感器（BH1750 芯片，I2C） ----------------
 // 接线：VCC -> 3.3V，GND -> GND，SDA -> D21，SCL -> D22（模块自带 4.7kΩ 上拉，无需外接）
 // 地址：ADDR 悬空/接地 = 0x23（默认）；ADDR 接 VCC = 0x5C。初始化时会自动探测
@@ -193,6 +212,9 @@ void processPressureSensor();
 void initDistanceSensor();
 void processDistanceSensor();
 void setTankHeightMm(float mm);
+void initDistanceSensor2();
+void processDistanceSensor2();
+void setTankHeightMm2(float mm);
 
 // 光照传感器模块（GY-302 / BH1750）
 void initLightSensor();
@@ -200,6 +222,7 @@ void processLightSensor();
 
 // 网页 / HTTP 模块
 void sendJson(int code, const String& json);
+const char* resetReasonText();   // 上次复位原因（诊断用）
 void handleRoot();
 void handleData();
 void handleFlow();
@@ -228,6 +251,8 @@ void handleHeater2State();
 void handleHealth();
 void handleLevel();
 void handleLevelHeight();
+void handleLevel2();
+void handleLevelHeight2();
 void handleLight();
 void handleNotFound();
 void registerRoutes();

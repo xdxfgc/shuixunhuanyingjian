@@ -8,6 +8,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 - DS18B20 防水探头水温检测 ×2（D27 / D25，非阻塞读取）
 - 压力传感器 0-1MPa 模拟输出检测（D33）
 - 超声波测距 → 水位检测（Trig D23 / Echo D18）：水位 = 预定高度 − 测距值
+- 第二路超声波测距 → 水位2（Trig D4 / Echo D13）
 - GY-302 / BH1750 光照检测（I2C D21/D22）
 - WiFi 联网（固定 IP + mDNS），**关闭省电模式 + 掉线自动重连**（手机热点不稳定时能自恢复）
 - 网页控制继电器水泵（D32）开关
@@ -25,6 +26,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 - 压力传感器（0-1MPa）：红 → 5V，黑 → GND，黄（信号）→ 10kΩ 串到 D33，D33 再接 20kΩ 到 GND
   （5V 供电时输出可达 4.5V，超过 ESP32 ADC 量程，必须分压；换算参数在 config.h 里）
 - 超声波测距（HC-SR04 / JSN-SR04T）：VCC → 5V，GND → GND，Trig → D23，Echo → 1kΩ → D18 → 2kΩ → GND
+- 第二路超声波：VCC → 5V，GND → GND，Trig → **D4**，Echo → 1kΩ → **D13** → 2kΩ → GND
   （Echo 输出 5V，必须分压；3.3V 版本模块如 RCWL-1601 可直连）
 - GY-302 光照：VCC → 3.3V，GND → GND，SDA → D21，SCL → D22（模块自带上拉，无需外接）
 - 继电器（WKY-1-RELAY-1）：DC+ → 5V，DC- → GND，IN → D32，跳线帽拨到 H（高电平触发）
@@ -49,6 +51,8 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/pressure` | 压力（MPa，附 voltage 标定值） |
 | `GET /api/level` | 水位（% / mm，附测距值与回声脉宽） |
 | `GET /api/level/height?value=250` | 设置/查询预定高度（mm，写入 NVS 掉电不丢） |
+| `GET /api/level2` | 水位2（%，附测距值、回声脉宽、预定高度） |
+| `GET /api/level2/height?value=100` | 设置/查询第二路的预定高度（mm） |
 | `GET /api/light` | 光照强度（lx） |
 | `GET /api/pump/on` | 开水泵 |
 | `GET /api/pump/off` | 关水泵 |
@@ -67,7 +71,7 @@ ESP32 + YF-S401 水流量传感器 + WiFi HTTP 服务器 + 继电器水泵 的�
 | `GET /api/heater2/off` | 关第二路加热 |
 | `GET /api/heater2/toggle` | 切换第二路加热 |
 | `GET /api/heater2/state` | 第二路加热状态 |
-| `GET /api/health` | 服务器状态 |
+| `GET /api/health` | 服务器状态（含 `resetReason`、`freeHeap`、`wifiReconnects` 等诊断字段） |
 
 用 Arduino IDE 打开 `YF-S401_flow/YF-S401_flow.ino`，选择 ESP32 Dev Module 编译烧录即可。
 
@@ -82,6 +86,7 @@ YF-S401_flow/
 ├── temp_sensor2.cpp   水温检测模块 #2（D25，DS18B20）
 ├── pressure_sensor.cpp 压力传感器模块（D33，0-1MPa 模拟）
 ├── distance_sensor.cpp 超声波测距/水位模块（Trig D23 / Echo D18）
+├── distance_sensor2.cpp 第二路超声波测距/水位模块（Trig D4 / Echo D13）
 ├── light_sensor.cpp    GY-302 光照模块（BH1750，I2C D21/D22）
 ├── relay.cpp          继电器/水泵控制模块（D32）
 ├── relay2.cpp         第二路继电器/水泵控制模块（D14）
