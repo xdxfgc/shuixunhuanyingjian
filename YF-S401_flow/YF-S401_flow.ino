@@ -37,14 +37,14 @@
 
 // ---------------- 网络配置（在这里改） ----------------
 // ⚠️ 标准 ESP32 只支持 2.4GHz WiFi，不支持 5GHz 频段！
-const char* WIFI_SSID = "最优化太难复习了";
-const char* WIFI_PASSWORD = "88888888";
+const char* WIFI_SSID = "TP-LINK_930C";
+const char* WIFI_PASSWORD = "12345678";
 
 // 固定 IP（按你的路由器网段调整）
-IPAddress LOCAL_IP(10,177,222,100);
-IPAddress GATEWAY(10,177,222,64);
+IPAddress LOCAL_IP(192,168,1,115);
+IPAddress GATEWAY(192,168,1,1);
 IPAddress SUBNET(255, 255, 255, 0);
-IPAddress DNS1(10,177,222,64);
+IPAddress DNS1(192,168,1,1);
 IPAddress DNS2(223, 5, 5, 5);
 
 // mDNS 域名，浏览器可访问 http://esp32flow.local
