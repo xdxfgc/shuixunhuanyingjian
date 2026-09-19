@@ -33,14 +33,14 @@
 
 // ---------------- 网络配置（在这里改） ----------------
 // ⚠️ 标准 ESP32 只支持 2.4GHz WiFi，不支持 5GHz 频段！
-const char* WIFI_SSID = "Xiaomi_AE4D";
-const char* WIFI_PASSWORD = "123456780";
+const char* WIFI_SSID = "最优化太难复习了";
+const char* WIFI_PASSWORD = "88888888";
 
 // 固定 IP（按你的路由器网段调整）
-IPAddress LOCAL_IP(192,168,31,100);
-IPAddress GATEWAY(192, 168, 31, 1);
+IPAddress LOCAL_IP(10,177,222,100);
+IPAddress GATEWAY(10,177,222,64);
 IPAddress SUBNET(255, 255, 255, 0);
-IPAddress DNS1(192, 168, 31, 1);
+IPAddress DNS1(10,177,222,64);
 IPAddress DNS2(223, 5, 5, 5);
 
 // mDNS 域名，浏览器可访问 http://esp32flow.local
@@ -55,6 +55,8 @@ unsigned long lastSampleMs = 0;          // 上次结算时刻
 unsigned long lastWindowMs = 0;          // 上次结算实际用时 ms
 unsigned long lastWindowPulses = 0;      // 上次窗口内脉冲数
 unsigned long startTime = 0;
+unsigned long lastReconnectMs = 0;        // WiFi 断线重连计时
+unsigned long lastWifiReportMs = 0;       // WiFi 状态打印计时
 bool pumpState = false;                  // 水泵当前状态：true=开
 bool pumpState2 = false;                 // 水泵2 当前状态：true=开（D14）
 float pumpTargetLiters = 0.0;            // 定量浇水量 L
@@ -105,6 +107,8 @@ void setup() {
 
   // 连接 WiFi（固定 IP）
   WiFi.mode(WIFI_STA);
+  // ★ 关闭 WiFi 省电模式：默认省电模式在手机热点上会导致周期性掉线
+  WiFi.setSleep(false);
   WiFi.config(LOCAL_IP, GATEWAY, SUBNET, DNS1, DNS2);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -221,6 +225,21 @@ void loop() {
     Serial.print("mm");
     Serial.print("  光照(lx): ");
     Serial.println(lightOk ? String(lastLux, 1) : "无效");
+  }
+
+  // ---- WiFi 掉线自动重连 + 状态监控 ----
+  // 手机热点容易短暂断开：每 5 秒尝试重连一次，连上后每 10 秒报一次状态
+  if (WiFi.status() != WL_CONNECTED) {
+    if (millis() - lastReconnectMs >= 5000) {
+      lastReconnectMs = millis();
+      Serial.println("WiFi 断开，正在重连...");
+      WiFi.disconnect();
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    }
+  } else if (millis() - lastWifiReportMs >= 10000) {
+    lastWifiReportMs = millis();
+    Serial.printf("[WiFi] 在线  IP=%s  信号=%d dBm\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
   }
 
   // 处理 HTTP 请求
